@@ -1,17 +1,20 @@
 import Kuratowski.Dep.Sym2
 import Kuratowski.Dep.NotSure
 import Kuratowski.Dep.Option
+import Kuratowski.Dep.Ordered
 
 
-structure MultiGraph (αᵥ αₑ : Type*) where
+inductive Edge (αᵥ αₑ : Type*) [LinearOrder αᵥ] where
+| of : (OrderedLen αᵥ 2) → Edge αᵥ αₑ
+| di : (Option αᵥ × Option αᵥ) → Edge αᵥ αₑ
+
+structure MultiGraph (αᵥ αₑ : Type*) [LinearOrder αᵥ] where
   V : Set αᵥ
-  inc : αₑ → Option (Sym2 αᵥ)
-  E : Set αₑ := {e | (inc e).isSome}
-  domain_inc : E = {e | (inc e).isSome} := by rfl
+  inc : αₑ → Option (OrderedLen αᵥ 2)
   range_inc : ∀ (e : αₑ) (he : (inc e).isSome), ↑((inc e).get he) ⊆ V
 
 
-namespace MultiGraphDissociatedNames
+namespace MultiGraph
 
 variable {αᵥ αₑ : Type*} [DecidableEq αᵥ] [DecidableEq αₑ] (G : MultiGraph αᵥ αₑ)
 

@@ -1,4 +1,5 @@
-import Mathlib
+import Mathlib.Data.Sym.Sym2
+-- import Mathlib
 
 
 namespace Sym2
@@ -27,12 +28,11 @@ instance LawfulFunctor : LawfulFunctor Sym2 where
     rw [Sym2.map_map]
     done
 
-
-lemma FunctorSetLikeCommute {α β : Type u} (f : α → β) :
-  (SetLike.coe ∘ (f <$> ·) : Sym2 α → Set β) = (f <$> ·) ∘ SetLike.coe := by
-  ext s b
-  simp
-  done
+-- lemma FunctorSetLikeCommute {α β : Type u} (f : α → β) :
+--   (SetLike.coe ∘ (f <$> ·) : Sym2 α → Set β) = (f <$> ·) ∘ SetLike.coe := by
+--   ext s b
+--   simp
+--   done
 
 
 variable {α : Type*}
@@ -42,7 +42,6 @@ lemma out_mk_eq_or_swap (v w : α) : Quot.out s(v, w) = (v, w) ∨ Quot.out s(v,
   obtain h := Classical.choose_spec (@Quot.exists_rep (α × α) (Sym2.Rel α) s(v, w))
   simp only [Sym2.eq, Sym2.rel_iff', Prod.swap_prod_mk, or_self] at h ⊢
   exact h
-  done
 
 lemma eq_mk_out (x : Sym2 α) : x = s(x.out.1, x.out.2) := by
   simp only [Prod.mk.eta, Quot.out_eq]
@@ -50,15 +49,9 @@ lemma eq_mk_out (x : Sym2 α) : x = s(x.out.1, x.out.2) := by
 lemma eq_iff_out_eq_or_out_swap (x : Sym2 α) (v w : α) :
   x = s(v, w) ↔ x.out = (v, w) ∨ x.out = (w, v) := by
   constructor
-  · -- 1.
-    rintro rfl
+  · rintro rfl
     exact Sym2.out_mk_eq_or_swap v w
-    done
-  · -- 2.
-    rintro (h | h)
-    <;> rw [Sym2.eq_mk_out x, Sym2.eq_iff]
-    <;> simp [h]
-    done
+  · rintro (h | h) <;> rw [Sym2.eq_mk_out x, Sym2.eq_iff] <;> simp [h]
 
 -- lemma CanLiftSym2Subtype (p : α → Prop) :
 --   ∀ (x : Sym2 α), (∀ i ∈ x, p i) → ∃ y : Sym2 (Subtype p), Sym2.map (fun x ↦ ↑x) y = x := by

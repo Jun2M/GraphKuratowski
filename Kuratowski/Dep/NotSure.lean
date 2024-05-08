@@ -1,4 +1,6 @@
-import Mathlib
+-- import Mathlib
+import Mathlib.Data.Sym.Sym2
+import Mathlib.Tactic
 
 
 def Fin0To (α : Type*) : Fin 0 → α := by
@@ -46,5 +48,3 @@ instance Set.gSetLike : gSetLike Set where
 instance gSetLike.SetLike {T : Type → Type} [gSetLike T] : SetLike (T α) α where
   coe := gSetLike.coe α
   coe_injective' := gSetLike.coe_injective
-
-
