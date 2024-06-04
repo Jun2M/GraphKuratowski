@@ -1,7 +1,7 @@
 import Mathlib.Tactic
 import Kuratowski.Dep.Sym2
 
-open Classical Set
+open Set
 
 /-- This is a weird, very 'inclusive' definition of a graph, allowing for directed/undirected edges
   and some more degenerate flavours of edge. Here, `inc false e` is the set of 'heads' of `e` and
@@ -26,18 +26,18 @@ open Classical Set
   graphs.
   -/
 @[ext]
-structure Graph (V : Type*) (E : Type*) where
+structure Graph (V : Type*) (E : Type*) [DecidableEq V] [DecidableEq E] where
   inc : Bool → E → Finset V
   well_def : ∀ (i : Bool) (e : E), 2 ≤ (inc i e).card →
-    ∃ (u v : V), u ≠ v ∧ ∀ j, inc j e = ({u,v} : Finset V)
+    ∃ (u v : V), u ≠ v ∧ ∀ j, inc j e = ({u, v} : Finset V)
 
--- structure GraphPeterVsetEset (V : Type*) (E : Type*) where
---   Vset : Set V
---   Eset : Set E
---   inc : Bool → E → Finset V
---   edgeEnds : ∀ (e : E), ↑(inc false e) ⊆ setV ∧ ↑(inc true e) ⊆ setV
---   well_def : ∀ (i : Bool) (e : E), 2 ≤ (inc i e).card →
---     ∃ (u v : V), u ≠ v ∧ ∀ j, inc j e = ({u,v} : Set V)
+structure Graphs (V : Type*) (E : Type*) [DecidableEq V] [DecidableEq E] where
+  Vset : Set V
+  Eset : Set E
+  inc : Bool → E → Finset V
+  edgeEnds : ∀ (i : Bool) (e : E), (inc i e) ⊆ setV
+  well_def : ∀ (i : Bool) (e : E), 2 ≤ (inc i e).card →
+    ∃ (u v : V), u ≠ v ∧ ∀ j, inc j e = ({u,v} : Set V)
 
 -- inductive _Edge (V : Type*) where
 --   | introUndirected (e : Sym2 V)
@@ -61,7 +61,7 @@ structure Graph (V : Type*) (E : Type*) where
 
 namespace Graph
 
-variable {V E : Type*}
+variable {V E : Type*} [DecidableEq V] [DecidableEq E]
 
 def mk' (inc : Bool → E → Finset V)
   (well_def' : ∀ (i : Bool) (e : E), (inc i e).card < 2 ∨ ((inc i e).card = 2 ∧ inc i e = inc (!i) e)) :
@@ -69,23 +69,20 @@ def mk' (inc : Bool → E → Finset V)
   inc := inc
   well_def := by
     intro i e heCard
-    specialize well_def' i e
-    rcases well_def' with h1 | ⟨ hCard, hEq ⟩
+    obtain (h1 | ⟨ hCard, hEq ⟩) := well_def' i e
     · exfalso
       exact not_lt_of_le heCard h1
-    · rw [(inc i e).card_eq_two] at hCard
-      rcases hCard with ⟨ u, v, huNeqv, hincEq ⟩
-      use u, v, huNeqv
-      intro j
-      rcases j.eq_or_eq_not i with hij | hij
-      · rw [hij, hincEq]
-      · rw [hij, ← hEq, hincEq]
+    · obtain ⟨ u, v, huNeqv, hincEq ⟩ := Finset.card_eq_two.mp hCard
+      refine ⟨ u, v, huNeqv, fun j => ?_ ⟩
+      obtain (rfl | rfl) := j.eq_or_eq_not i
+      · rw [hincEq]
+      · rw [← hEq, hincEq]
     done
 
 /-- An edge is `full` if it actually has two ends -/
 def is_full (G : Graph V E) (e : E) : Prop := ∀ i, (G.inc i e).Nonempty
 
-noncomputable def ends (G : Graph V E) (e : E) : Finset V := G.inc false e ∪ G.inc true e
+def ends (G : Graph V E) (e : E) : Finset V := G.inc false e ∪ G.inc true e
 
 /-- `e: E` is undirected if all its end sets are the same -/
 def undir (G : Graph V E) (e : E) : Prop := ∃ S : Finset V, ∀ i, G.inc i e = S
@@ -114,22 +111,22 @@ lemma inc_card_le (G : Graph V E) (i : Bool) (e : E) :
 lemma ends_card_le (G : Graph V E) (e : E) : (G.ends e).card ≤ 2 := by
   by_contra! h
   rw [Graph.ends] at h
-  have : ∃ i, 2 ≤ (G.inc i e).card
-  { by_contra! h'
+  have : ∃ i, 2 ≤ (G.inc i e).card := by
+    by_contra! h'
     simp_rw [Nat.lt_succ_iff] at h'
-    linarith [h' true, h' false, h.trans_le (Finset.card_union_le _ _)] }
+    linarith [h' true, h' false, h.trans_le (Finset.card_union_le _ _)]
   obtain ⟨i, hi⟩ := this
-  obtain ⟨u,v,huv,h''⟩ := G.well_def i e hi
+  obtain ⟨u, v, huv, h''⟩ := G.well_def i e hi
   rw [h'' true, h'' false, Finset.union_idempotent] at h
   simpa using h.trans_le (Finset.card_insert_le _ _)
 
-lemma Finset.card_le_two {α : Type*} {s : Finset α} (hs : s.card ≤ 2) :
-  s = ∅ ∨ (∃ u, s = {u}) ∨ ∃ u v, u ≠ v ∧ s = {u,v} := by
-  rwa [le_iff_lt_or_eq, Finset.card_eq_two, Nat.lt_succ_iff_lt_or_eq, Nat.lt_succ_iff,
-    le_zero_iff, Finset.card_eq_zero, Finset.card_eq_one, or_assoc] at hs
+-- lemma Finset.card_le_two {α : Type*} {s : Finset α} (hs : s.card ≤ 2) :
+--   s = ∅ ∨ (∃ u, s = {u}) ∨ ∃ u v, u ≠ v ∧ s = {u,v} := by
+--   rwa [le_iff_lt_or_eq, Finset.card_eq_two, Nat.lt_succ_iff_lt_or_eq, Nat.lt_succ_iff,
+--     le_zero_iff, Finset.card_eq_zero, Finset.card_eq_one, or_assoc] at hs
 
-lemma Finset.card_pair {α : Type*} {u v : α} (huv : u ≠ v) : ({u,v} : Finset α).card = 2 :=
-by { rw [Finset.card_insert_eq_ite, if_neg, Finset.card_singleton]; rwa [Finset.mem_singleton] }
+-- lemma Finset.card_pair {α : Type*} {u v : α} (huv : u ≠ v) : ({u,v} : Finset α).card = 2 :=
+-- by { rw [Finset.card_insert_eq_ite, if_neg, Finset.card_singleton]; rwa [Finset.mem_singleton] }
 
 variable {G : Graph V E}
 
@@ -143,7 +140,8 @@ lemma edge_iff_exists_inc_card_eq_two : G.edge e ↔ ∃ i, (G.inc i e).card = 2
 
 lemma free_or_half_edge_of_inc_eq_empty {i : Bool} (h : G.inc i e = ∅) : G.free e ∨ G.half_edge e := by
   obtain (h0 | h1) := eq_or_ne (G.inc (!i) e) ∅
-  { left; obtain (i | i) := i<;> {rintro (j | j)<;> assumption } }
+  · left
+    obtain (_ | _) := i <;> rintro (j | j) <;> assumption
   rw [←Finset.nonempty_iff_ne_empty, ←Finset.card_pos, ←Nat.succ_le_iff, le_iff_eq_or_lt,
     eq_comm, Finset.card_eq_one, Nat.lt_iff_add_one_le, (by rfl : (0:Nat).succ = 1), one_add_one_eq_two] at h1
   obtain (⟨a, ha⟩ | h2) := h1
