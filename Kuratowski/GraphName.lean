@@ -1,4 +1,5 @@
-import Mathlib.Tactic
+-- import Mathlib.Tactic
+import Mathlib
 import Kuratowski.Dep.Sym2
 
 open Set
@@ -31,6 +32,7 @@ structure Graph (V : Type*) (E : Type*) [DecidableEq V] [DecidableEq E] where
   well_def : ∀ (i : Bool) (e : E), 2 ≤ (inc i e).card →
     ∃ (u v : V), u ≠ v ∧ ∀ j, inc j e = ({u, v} : Finset V)
 
+@[ext]
 structure Graphs (V : Type*) (E : Type*) [DecidableEq V] [DecidableEq E] where
   Vset : Set V
   Eset : Set E
@@ -39,25 +41,136 @@ structure Graphs (V : Type*) (E : Type*) [DecidableEq V] [DecidableEq E] where
   well_def : ∀ (i : Bool) (e : E), 2 ≤ (inc i e).card →
     ∃ (u v : V), u ≠ v ∧ ∀ j, inc j e = ({u,v} : Set V)
 
--- inductive _Edge (V : Type*) where
---   | introUndirected (e : Sym2 V)
---   | introDirected (e : (Option V) × (Option V))
+-- Do I need a separate none (edge not bound) that is not dir (none × none)?
+-- For now, dir (none × none) represents that the edge is not bound
+inductive edge (V : Type*)
+| dir : Option V × Option V → edge V
+| undir : {a : Multiset V // Multiset.card a = 2} → edge V
 
--- structure GraphCases (V : Type*) (E : Type*) where
---   inc : E → _Edge V
+@[ext]
+structure Graphc (V : Type*) (E : Type*) [DecidableEq V] [DecidableEq E] where
+  boundV : Set V
+  inc : E → edge V
+  ends_bound : ∀ e, match inc e with
+    | edge.dir (a', b') => [a', b'].foldl (λ s a' => s ∧
+      match a' with
+      | some a => a ∈ boundV
+      | _ => true) true
+    | edge.undir ⟨m, _⟩ => ∀ a ∈ m, a ∈ boundV
 
--- structure GraphCasesVsetEset where
---   Vset : Set V
---   Eset : Set E
---   inc : E → _Edge V
---   edgeEnds : ∀ (e : E),
---     match inc e with
---     | _Edge.introUndirected e => (↑e : Set V) ⊆ setV
---     | _Edge.introDirected (some v1, some v2) => v1 ∈ setV ∧ v2 ∈ setV
---     | _Edge.introDirected (some v1, none) => v1 ∈ setV
---     | _Edge.introDirected (none, some v2) => v2 ∈ setV
---     | _Edge.introDirected (none, none) => True
+namespace Graphc
+open edge
+variable {V : Type*} {E : Type*} [DecidableEq V] [DecidableEq E] (G : Graphc V E)
 
+def boundE : Set E := {e : E | G.inc e ≠ edge.dir (none, none)}
+
+def start (e : E) : Multiset V := match G.inc e with
+  | edge.dir (a, _) => match a with
+    | some a => {a}
+    | none => ∅
+  | edge.undir ⟨m, _⟩ => m
+
+def finish (e : E) : Multiset V := match G.inc e with
+  | edge.dir (_, b) => match b with
+    | some b => {b}
+    | none => ∅
+  | edge.undir ⟨m, _⟩ => m
+
+def ends (e : E) : Multiset V := match G.inc e with
+  | edge.dir (a, b) => [a, b].foldl (λ s x =>
+    match x with
+    | some x => insert x s
+    | none => s) ∅
+  | edge.undir ⟨m, _h⟩ => m
+
+lemma mem_boundE_iff_ends_nonempty (e : E) : e ∈ G.boundE ↔ (G.ends e) ≠ ∅ := by
+  unfold boundE ends
+  match hag : G.inc e with
+  | edge.dir (none, none) => simp [hag]
+  | edge.dir (some _, none) => simp [hag]
+  | edge.dir (none, some _) => simp [hag]
+  | edge.dir (some _, some _) => simp [hag]
+  | edge.undir ⟨m, hm⟩ =>
+    simp only [ne_eq, mem_setOf_eq, hag, not_false_eq_true, Multiset.empty_eq_zero, true_iff]
+    apply_fun Multiset.card
+    simp [hm]
+    done
+
+/-- An edge is `full` if it actually has two ends -/
+def full (e : E) : Bool := match G.inc e with
+  | edge.dir (some _, some _) => true
+  | edge.undir _ => true
+  | _ => false
+
+def free (e : E) : Bool := match G.inc e with
+  | edge.dir (none, none) => true
+  | _ => false
+
+def dir (e : E) : Bool := match G.inc e with
+  | edge.dir _ => true
+  | _ => false
+
+def undir (e : E) : Bool := match G.inc e with
+  | edge.dir _ => false
+  | _ => true
+
+lemma full_of_undir (h : G.undir e) : G.full e := by
+  unfold full undir at *
+  match hag : G.inc e with
+  | edge.dir _ => simp [hag] at h
+  | edge.undir _ => simp
+
+lemma dir_or_undir (e : E) : G.dir e ∨ G.undir e := by
+  unfold dir undir
+  cases G.inc e <;> simp
+
+def loop (e : E) : Bool := match G.inc e with
+  | edge.dir (some a, some b) => a = b
+  | edge.undir ⟨m, _⟩ => ¬ m.Nodup
+  | _ => false
+
+def arc (e : E) : Bool := match G.inc e with
+  | edge.dir (some a, some b) => a ≠ b
+  | _ => false
+
+def halfEdge (e : E) : Bool := match G.inc e with
+  | edge.dir (some _, none) => true
+  | edge.dir (none, some _) => true
+  | _ => false
+
+
+def edge_between (e : E) (v₁ v₂ : V) : Prop :=
+  G.inc e = edge.undir ⟨{v₁, v₂}, Multiset.card_pair v₁ v₂⟩
+
+/-- Two vertices are adjacent if there is an edge having both vertices as ends. -/
+def adj (u v : V) : Prop := ∃ e, u ∈ G.ends e ∧ v ∈ G.ends e
+
+/-- A full graph is one with no half-edges. Can have a free edge!-/
+class fullGraph : Prop :=
+  no_half : ∀ e, ¬ G.halfEdge e
+
+/-- An undirected graph is a full graph with no arcs -/
+class undirected extends fullGraph G :=
+  edge_symm : ∀ e, G.undir e
+
+/-- A loopless graph is one with no loops, free edges or half_edges
+  (so every edge is an arc or edge ) -/
+class loopless extends fullGraph G :=
+  no_loops : ∀ e, ¬G.loop e
+
+-- class multiGraph extends undirected G :=
+-- (no_free : ∀ e, ¬G.free e)
+
+/-- A simple graph is one where every edge is a actual undirected 'edge'
+  and no two edges have the same ends.  -/
+class simple extends loopless G, undirected G :=
+  inc_inj : G.inc.Injective
+
+def edge_set (G : Graphc V (V × V)) : Set (V × V) := { e | G.edge_between e e.1 e.2 }
+
+
+
+end Graphc
 
 namespace Graph
 
@@ -130,6 +243,9 @@ lemma ends_card_le (G : Graph V E) (e : E) : (G.ends e).card ≤ 2 := by
 
 variable {G : Graph V E}
 
+-- lemma undir_iff_symm {e : E} : G.undir e ↔ ∀ i, G.inc i e = G.inc (!i) e := by
+
+
 lemma edge_of_inc_card_eq_two {i : Bool} (h : (G.inc i e).card = 2) : G.edge e :=
 by { have h' := G.well_def i e; rwa [h, imp_iff_right rfl.le] at h' }
 
@@ -141,7 +257,9 @@ lemma edge_iff_exists_inc_card_eq_two : G.edge e ↔ ∃ i, (G.inc i e).card = 2
 lemma free_or_half_edge_of_inc_eq_empty {i : Bool} (h : G.inc i e = ∅) : G.free e ∨ G.half_edge e := by
   obtain (h0 | h1) := eq_or_ne (G.inc (!i) e) ∅
   · left
-    obtain (_ | _) := i <;> rintro (j | j) <;> assumption
+    obtain (_ | _) := i
+    <;> rintro (j | j)
+    <;> assumption
   rw [←Finset.nonempty_iff_ne_empty, ←Finset.card_pos, ←Nat.succ_le_iff, le_iff_eq_or_lt,
     eq_comm, Finset.card_eq_one, Nat.lt_iff_add_one_le, (by rfl : (0:Nat).succ = 1), one_add_one_eq_two] at h1
   obtain (⟨a, ha⟩ | h2) := h1
@@ -163,11 +281,16 @@ lemma arc_or_loop_or_half_edge_of_card_inc_eq_one {i : Bool} (h : (G.inc i e).ca
     le_iff_eq_or_lt, eq_comm, Finset.card_eq_one, Nat.lt_iff_add_one_le, (by rfl : (0:Nat).succ = 1), one_add_one_eq_two] at h1
   obtain (⟨b, hb⟩ | h2) := h1
   { obtain (rfl | hne) := eq_or_ne a b
-    { right; left; use a; cases i<;> {rintro (j | j)<;> assumption } }
+    { right
+      left
+      use a
+      cases i
+      <;> {rintro (j | j)
+          <;> assumption } }
     left
-    cases' i
-    { exact ⟨ a, b, hne, ha, hb ⟩ }
-    { exact ⟨ b, a, hne.symm, hb, ha ⟩ } }
+    cases i
+    · exact ⟨ a, b, hne, ha, hb ⟩
+    · exact ⟨ b, a, hne.symm, hb, ha ⟩ }
   obtain ⟨u,v,huv, h⟩ := G.well_def _ _ h2
   apply_fun Finset.card at ha
   rw [h, Finset.card_pair huv, Finset.card_singleton] at ha
